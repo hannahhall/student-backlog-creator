@@ -15,7 +15,7 @@ http_error_messages[403] = http_error_messages[401]
 http_error_messages[404] = "ERROR: Unable to find the specified repository.\nDouble check the spelling for the source and target repositories. If either repository is private, make sure the specified user is allowed access to it."
 
 
-def import_issues(config, issues):
+def import_issues(config, issues, repo):
 
     new_issues = []
 
@@ -39,18 +39,54 @@ def import_issues(config, issues):
         new_issue['body'] = format_issue(config, template_data)
         new_issues.append(new_issue)
 
-    print("You are about to add to '" +
-          config.get('target', 'repository') + "':")
-    print(" *", len(new_issues), "new issues")
+    print(f"You are about to add to {repo}:")
+    print(f"\t* {len(new_issues)} new issues")
 
     result_issues = []
     for issue in new_issues:
         issue['labels'] = ['enhancement']
-        result_issue = send_import_request(config, 'target', "issues", issue)
-        print("Successfully created issue '%s'" % result_issue['title'])
+        result_issue = send_import_request(config, repo, issue)
+        print(f"Successfully created issue '{result_issue['title']}'")
         result_issues.append(result_issue)
 
     return result_issues
+
+def send_import_request(config, repo, post_data=None):
+
+    if post_data is not None:
+        post_data = json.dumps(post_data).encode("utf-8")
+
+    full_url = f"{repo}/issues"
+    req = urllib.request.Request(full_url, post_data)
+
+    username = config.get('target', 'username')
+    password = config.get('target', 'password')
+
+    req.add_header("Authorization", b"Basic " + base64.urlsafe_b64encode(
+        username.encode("utf-8") + b":" + password.encode("utf-8")))
+
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+    req.add_header("User-Agent", "nss/ticket-migrator")
+
+    try:
+        response = urllib.request.urlopen(req)
+        json_data = response.read()
+    except urllib.error.HTTPError as error:
+
+        error_details = error.read()
+        error_details = json.loads(error_details.decode("utf-8"))
+
+        if error.code in http_error_messages:
+            sys.exit(http_error_messages[error.code])
+        else:
+            error_message = "ERROR: There was a problem importing the issues.\n%s %s" % (
+                error.code, error.reason)
+            if 'message' in error_details:
+                error_message += "\nDETAILS: " + error_details['message']
+            sys.exit(error_message)
+
+    return json.loads(json_data.decode("utf-8"))
 
 
 def format_from_template(template_filename, template_data):
@@ -102,38 +138,3 @@ def get_issues_by_id(config, which, issue_ids):
     return issues
 
 
-def send_import_request(config, which, url, post_data=None):
-
-    if post_data is not None:
-        post_data = json.dumps(post_data).encode("utf-8")
-
-    full_url = "%s/%s" % (config.get(which, 'url'), url)
-    req = urllib.request.Request(full_url, post_data)
-
-    username = config.get(which, 'username')
-    password = config.get(which, 'password')
-    req.add_header("Authorization", b"Basic " + base64.urlsafe_b64encode(
-        username.encode("utf-8") + b":" + password.encode("utf-8")))
-
-    req.add_header("Content-Type", "application/json")
-    req.add_header("Accept", "application/json")
-    req.add_header("User-Agent", "nss/ticket-migrator")
-
-    try:
-        response = urllib.request.urlopen(req)
-        json_data = response.read()
-    except urllib.error.HTTPError as error:
-
-        error_details = error.read()
-        error_details = json.loads(error_details.decode("utf-8"))
-
-        if error.code in http_error_messages:
-            sys.exit(http_error_messages[error.code])
-        else:
-            error_message = "ERROR: There was a problem importing the issues.\n%s %s" % (
-                error.code, error.reason)
-            if 'message' in error_details:
-                error_message += "\nDETAILS: " + error_details['message']
-            sys.exit(error_message)
-
-    return json.loads(json_data.decode("utf-8"))

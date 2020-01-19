@@ -1,5 +1,6 @@
 #!/Users/chortlehoort/.pyenv/shims/python
 
+import json
 import sys
 import os
 import query
@@ -44,8 +45,6 @@ def init_config():
     include_group.add_argument("-a", "--all", dest='import_all', action='store_true',
                                help="Import all open issues.")
     include_group.add_argument('-i', '--issues', nargs='+', type=int, help="The list of issues to import. (e.g. -i 1 5 6 10 15)")
-    # include_group.add_argument(
-    #     "-i", "--issues", type=str, nargs='+', help="The list of issues to import.")
 
     args = arg_parser.parse_args()
 
@@ -86,50 +85,26 @@ def init_config():
         config.set('source', 'repository', args.source)
 
     if args.target:
-        config.set('target', 'repository', args.target)
+        config.set('target', 'repositories', args.targets)
 
     # Make sure no required config values are missing
     if not config.has_option('source', 'repository'):
         sys.exit(
             "ERROR: There is no source repository specified either in the config file, or as an argument.")
-    if not config.has_option('target', 'repository'):
+    if not config.has_option('target', 'repositories'):
         sys.exit(
-            "ERROR: There is no target repository specified either in the config file, or as an argument.")
+            "ERROR: There are no target repositories specified either in the config file, or as an argument.")
 
     config.set('source', 'url', f'https://api.github.com/repos/{config.get('source', 'repository')}')
 
-    get_server_for('source')
-    get_server_for('target')
+    targets = json.loads(config.get("target", "repositories"))
+    full_target_urls = []
 
-    # Prompt for username/password if none is provided in either the config or an argument
+    for target in targets:
+        full_target_urls.append(f'https://api.github.com/repos/{target}')
 
-    def get_credentials_for(which):
-        if not config.has_option(which, 'username'):
-            if config.has_option('login', 'username'):
-                config.set(which, 'username', config.get('login', 'username'))
-            elif ((which == 'target') and query.yes_no("Do you wish to use the same credentials for the target repository?")):
-                config.set('target', 'username',
-                           config.get('source', 'username'))
-            else:
-                query_str = "Enter your username for '%s' at '%s': " % (
-                    config.get(which, 'repository'), config.get(which, 'server'))
-                config.set(which, 'username', query.username(query_str))
+    config.set('target', 'repositories', json.dumps(full_target_urls))
 
-        if not config.has_option(which, 'password'):
-            if config.has_option('login', 'password'):
-                config.set(which, 'password', config.get('login', 'password'))
-            elif ((which == 'target') and config.get('source', 'username') == config.get('target', 'username') and config.get('source', 'server') == config.get('target', 'server')):
-                config.set('target', 'password',
-                           config.get('source', 'password'))
-            else:
-                query_str = "Enter your password for '%s' at '%s': " % (
-                    config.get(which, 'repository'), config.get(which, 'server'))
-                config.set(which, 'password', query.password(query_str))
-
-    get_credentials_for('source')
-    get_credentials_for('target')
-
-    # Everything is here! Continue on our merry way...
     return args.issues or []
 
 def get_issues(issue_ids):
@@ -141,7 +116,6 @@ def get_issues(issue_ids):
     else:
         issues.extend(get_issues_by_state(config, 'source', 'open'))
 
-
     # Sort issues based on their original `id` field
     # Confusing, but taken from http://stackoverflow.com/a/2878123/617937
     issues.sort(key=lambda x: x['number'])
@@ -151,11 +125,14 @@ def get_issues(issue_ids):
 
 if __name__ == '__main__':
 
+    repos = json.loads(config.get("target", "repositories"))
     issue_ids = init_config()
-    # issues = get_issues(issue_ids)
-    # import_issues(config, issues)
+    issues = get_issues(issue_ids)
 
-    project = ProjectBoard(config)
-    project.create()
-    project.create_columns()
-    project.add_target_issues_to_backlog()
+    for repo in repos:
+        import_issues(config, issues, repo)
+
+        project = ProjectBoard(config)
+        project.create()
+        project.create_columns()
+        project.add_target_issues_to_backlog()
