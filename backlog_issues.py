@@ -1,4 +1,5 @@
 import termios
+from time import sleep
 import tty
 import sys
 import os
@@ -70,6 +71,9 @@ class Issues(object):
         os.system('cls' if os.name == 'nt' else 'clear')
 
         for issue in track(issues, description="Migrating..."):
+
+            sleep(5)
+
             try:
                 res = self.grequest.post(url, issue)
                 result_issue = res.json()
@@ -94,7 +98,7 @@ class Issues(object):
             issues.extend(self.get_open_issues())
 
         # Sort issues based on their original `id` field
-        issues.sort(key=lambda x: x['number'], reverse=True)
+        issues.sort(key=lambda x: x['number'])
 
         return issues
 
@@ -111,6 +115,10 @@ class Issues(object):
 
         while choice != 10:
             os.system('cls' if os.name == 'nt' else 'clear')
+
+            # r
+            if choice == 114:
+                issues.reverse()
 
             # k
             if choice == 107:
@@ -142,7 +150,7 @@ class Issues(object):
                 else:
                     print(f'[dark_magenta](  )[/dark_magenta] [chartreuse3]{issue["title"]}[/chartreuse3]')
 
-            print('\n\nj=[light_goldenrod1]cursor up[/light_goldenrod1]   k=[light_goldenrod1]cursor down[/light_goldenrod1]   u=[light_goldenrod1]move up[/light_goldenrod1]   d=[light_goldenrod1]move down[/light_goldenrod1]')
+            print('\n\nj=[light_goldenrod1]cursor up[/light_goldenrod1]   k=[light_goldenrod1]cursor down[/light_goldenrod1]   u=[light_goldenrod1]move up[/light_goldenrod1]   d=[light_goldenrod1]move down[/light_goldenrod1]   r=[light_goldenrod1]reverse[/light_goldenrod1]')
             choice = ord(sys.stdin.read(1))
 
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
